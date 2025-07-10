@@ -1,0 +1,190 @@
+Project Emozi
+
+Step 1 :
+Install python version 3.10.9 
+link "https://www.python.org/downloads/release/python-3109/"
+Which in our case is required for different libraries required
+
+Check python version after installtion complete 
+-> python --version
+
+Step 2 :
+Create a virtual enviroment
+
+-> open cmd has adminstrator (for permission)
+-> If inside C: drive then write given commands
+=> D: (to move to D drive)
+=> cd "D:\Divij\emotion_project" (path where project and env will be located)
+
+-> Now to create virtual enviroment
+=> python -m venv emotion_env (here emotion_env is enviroment name has you wish)
+=> emotion\Scripts\activate (to activate enviroment now on activate env before any operation for this project)
+
+Step 3 : 
+Create a requirements.txt file 
+
+Purpose of this file is state all library with their required verions
+
+Content of file 
+------------------------------
+tensorflow==2.15.0
+opencv-python==4.8.1.78
+numpy==1.24.4
+matplotlib==3.7.1
+pandas==1.5.3
+scikit-learn==1.2.2
+------------------------------ 
+
+Save the file inside location 
+
+D:\Divij Stuff\emotion_project" \
+│
+├── emotion_env\          ← Your virtual environment
+├── requirements.txt      ← ✅ Save here
+
+
+Now to install requirements.txt 
+=> pip install -r requirements.txt
+
+Till now you have installed all required libraries for your project 
+
+Note : If it shows error of unrecognized command pip then
+-> python -m ensurepip
+-> python -m pip install --upgrade pip (Make sure to run this command before you run requirements.txt)
+
+Step 4 : 
+Download Data set from kaggle 
+link  => "https://www.kaggle.com/datasets/msambare/fer2013"
+
+Download zip file and extact folder from above given link and then 
+store it in inside 
+D:\Divij Stuff\emotion_project" \
+│
+├── emotion_env\          ← Your virtual environment
+├── requirements.txt      ← requirements file
+├── archive      ← ✅ Save dataset here your kaggle folder and can change name to fer2013
+
+
+Step 5 : 
+Create main.py file to train your model it will run 15 epoches and will take approx 30 mins to train
+
+------------------------------
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelBinarizer
+
+# 1. Load the dataset
+data = pd.read_csv("fer2013.csv")
+
+# 2. Prepare the data
+pixels = data['pixels'].tolist()
+X = np.array([np.fromstring(pixel, sep=' ').reshape(48, 48) for pixel in pixels])
+X = X / 255.0  # Normalize pixel values
+X = np.expand_dims(X, -1)  # Add channel dimension for CNN (48,48,1)
+
+# 3. Encode the emotions
+y = data['emotion'].values
+encoder = LabelBinarizer()
+y = encoder.fit_transform(y)
+
+# 4. Split dataset
+X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# 5. Build the CNN model
+model = Sequential([
+    Conv2D(64, (3,3), activation='relu', input_shape=(48, 48, 1)),
+    MaxPooling2D((2,2)),
+    Conv2D(128, (3,3), activation='relu'),
+    MaxPooling2D((2,2)),
+    Flatten(),
+    Dense(128, activation='relu'),
+    Dropout(0.5),
+    Dense(7, activation='softmax')  # 7 emotion classes
+])
+
+model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+model.summary()
+
+# 6. Train the model
+history = model.fit(X_train, y_train, validation_data=(X_val, y_val), epochs=15, batch_size=64)
+
+# 7. Save the model
+model.save("emotion_model.h5")
+
+# 8. Plot training history
+plt.plot(history.history['accuracy'], label='train')
+plt.plot(history.history['val_accuracy'], label='validation')
+plt.title("Training vs Validation Accuracy")
+plt.legend()
+plt.show()
+-----------------------------------------
+
+after the process completes it will create a model named emotion_model.h5 will will be responsible for your data and emotion recogniation and it will plot a map of train and test data 
+
+
+Okay so lets revise what steps need to be completed 
+1) Installation of python library 
+2) Presence of required modal dataset 
+3) Trained modal stored has emotion_model.h5
+
+
+Step 6 :
+Creating a predict_live.py which has code that utilizes open_cv to predict emotion in realtime using your front camera
+
+----------------------------------------------
+import cv2
+import numpy as np
+import tensorflow as tf
+
+# Load the trained model
+model = tf.keras.models.load_model("emotion_model.h5")
+
+# Emotion labels (must match your training folder names)
+emotion_labels = ['Angry', 'Disgust', 'Fear', 'Happy', 'Sad', 'Surprise', 'Neutral']
+
+# Load OpenCV’s face detector (Haar Cascade)
+face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+
+# Start webcam
+cap = cv2.VideoCapture(0)
+
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        break
+
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)  # Convert frame to grayscale
+    faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+
+    for (x, y, w, h) in faces:
+        roi_gray = gray[y:y+h, x:x+w]
+        cropped = cv2.resize(roi_gray, (48, 48))     # Resize to model input
+        normalized = cropped / 255.0
+        reshaped = np.reshape(normalized, (1, 48, 48, 1))  # Add batch & channel dims
+
+        prediction = model.predict(reshaped)
+        emotion = emotion_labels[np.argmax(prediction)]
+
+        # Draw rectangle and label
+        cv2.rectangle(frame, (x, y), (x+w, y+h), (255, 100, 100), 2)
+        cv2.putText(frame, emotion, (x, y-10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
+
+    # Display the frame
+    cv2.imshow("Emotion Detection", frame)
+
+    if cv2.waitKey(1) & 0xFF == ord('q'):  # Press 'q' to quit
+        break
+
+cap.release()
+cv2.destroyAllWindows()
+------------------------------------------------
+
+
+Wahhla your code to predict emotion is ready!!!.
+Now i need a treat 
